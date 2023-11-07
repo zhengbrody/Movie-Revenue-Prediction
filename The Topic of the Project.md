@@ -1,4 +1,4 @@
-The Topic of the Project: Predictive Model for Movie Revenue Estimation and Decision Support. 
+# The Topic of the Project: Predictive Model for Movie Revenue Estimation and Decision Support. 
 
 Detailed Problem Statement:
 The movie industry is a dynamic and complex environment where various factors influence a movie's success, particularly its revenue. This project focuses on developing a robust "Predictive Model for Movie Revenue Estimation and Decision Support." In an era of high uncertainty and financial risk in the film production business, understanding the determinants of movie revenue is paramount for informed decision-making, investment strategies, and marketing planning.
