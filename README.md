@@ -17,3 +17,7 @@ By conducting a comprehensive analysis of these features, this research aims to 
 ## Model Building:
 
 ## Results and Conclusions:
+
+
+- Check assumption for LR
+- Check influential points
