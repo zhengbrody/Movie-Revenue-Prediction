@@ -239,6 +239,3 @@ cat("Mean Revenue:", mean_revenue, "\n")
 cat("Median Revenue:", median_revenue, "\n")
 cat("Quantiles (25%, 50%, 75%):", quantiles_revenue, "\n")
 ```
-
-```{r}
-```
