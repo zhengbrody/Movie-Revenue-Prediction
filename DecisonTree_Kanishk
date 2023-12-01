@@ -1,0 +1,104 @@
+**Kanishk decision tree**
+{r}
+library(rpart)
+set.seed(1)
+model_dt_fit <- rpart(Revenue ~ Popularity + Budget + Runtime + Avg_Vote + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="class", control = list(maxdepth = 4))
+predictions <- model_dt_fit%>%predict(test_data)
+library(tidymodels)
+library(tidyr)
+library(MASS)
+metrics <- metric_set(rmse, rsq)
+model_performance <- test_data %>%
+ mutate(predictions = predictions) %>%
+ metrics(truth = medv, estimate = predictions)
+
+print(model_performance)
+printcp(model_dt_fit)
+plotcp(model_dt_fit)
+
+sqrt(mean((test_data$Revenue - predictions)^2))
+
+
+{r}
+install.packages(c("Metrics", "ggplot2", "rpart", "caret"))
+library(Metrics)
+library(ggplot2)
+library(rpart)
+library(caret)
+library(caTools)
+# Assuming you have loaded the required libraries and have the dataframe 'df_no_gen'
+df_no_gen <- movie
+# Define dependent and independent variables
+dependent <- df_no_gen$Revenue
+independent <- df_no_gen[, 1:7]
+
+# Train-test split
+set.seed(42)  # equivalent to random_state=42 in Python
+split <- sample.split(dependent, SplitRatio = 0.8)
+train_data <- subset(df_no_gen, split == TRUE)
+test_data <- subset(df_no_gen, split == FALSE)
+
+# Linear Regression
+model_lm <- lm(Revenue ~ Popularity + Budget + Runtime + Avg_Vote + Vote_Count + Trailer_Views + Trailer_Likes, data = train_data)
+
+# Prediction by LM
+y_pred <- predict(model_lm, newdata = test_data)
+
+# Performance Metrics for LM
+library(Metrics)  # for r2 and other metrics
+r2 <- r2_Score(test_data$Revenue, y_pred)
+mse <- rmse(test_data$Revenue, y_pred)
+rmse <- sqrt(mse)
+cat("R2 Score:", r2, "\n")
+cat("Mean Squared Error:", mse, "\n")
+cat("Root Mean Squared Error:", rmse, "\n")
+
+# Barplot
+library(ggplot2)  # for ggplot
+ggplot(df_no_gen, aes(x = budget, y = revenue)) + geom_bar(stat = "identity")
+
+# Decision Tree
+library(rpart)  # for decision tree
+model_dt <- rpart(revenue ~ ., data = train_data)
+
+# Prediction by DT
+y_pred_dt <- predict(model_dt, newdata = test_data)
+
+# Performance Metrics for DT
+r2_dt <- r2_score(test_data$revenue, y_pred_dt)
+mse_dt <- mean_squared_error(test_data$revenue, y_pred_dt)
+rmse_dt <- sqrt(mse_dt)
+cat("Decision Tree - R2 Score:", r2_dt, "\n")
+cat("Decision Tree - Mean Squared Error:", mse_dt, "\n")
+cat("Decision Tree - Root Mean Squared Error:", rmse_dt, "\n")
+
+# Hyperparameter tuning using rpart
+library(caret)  # for RandomizedSearchCV equivalent
+set.seed(42)  # equivalent to random_state=42 in Python
+
+# Create the grid
+param <- list(
+  split=c('information','gini'),
+  maxdepth=c(5, 10, 15),
+  minsplit=c(1, 2, 5),
+  minbucket=c(1, 2, 5)
+)
+
+# RandomizedSearchCV
+ctrl <- trainControl(method = "cv", number = 5)
+grid <- train(revenue ~ ., data = train_data, method = "rpart", tuneGrid = param, trControl = ctrl)
+
+# Print best parameters
+cat("Best parameters:")
+print(grid$bestTune)
+
+# Prediction by tuned DT
+y_pred_dt_tuned <- predict(grid, newdata = test_data)
+
+# Performance Metrics for tuned DT
+r2_dt_tuned <- r2_score(test_data$revenue, y_pred_dt_tuned)
+mse_dt_tuned <- mean_squared_error(test_data$revenue, y_pred_dt_tuned)
+rmse_dt_tuned <- sqrt(mse_dt_tuned)
+cat("Tuned Decision Tree - R2 Score:", r2_dt_tuned, "\n")
+cat("Tuned Decision Tree - Mean Squared Error:", mse_dt_tuned, "\n")
+cat("Tuned Decision Tree - Root Mean Squared Error:", rmse_dt_tuned, "\n")
