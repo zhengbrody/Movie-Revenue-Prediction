@@ -239,3 +239,59 @@ cat("Mean Revenue:", mean_revenue, "\n")
 cat("Median Revenue:", median_revenue, "\n")
 cat("Quantiles (25%, 50%, 75%):", quantiles_revenue, "\n")
 ```
+
+```{r linear regression evaluation}
+# Fit the model on the training data
+#lm_train <- lm(paste(response, "~", paste(predictors, collapse = " + ")), data = train_data)
+model <- lm(Revenue ~ Trailer_Likes + Trailer_Views + Vote_Count + Budget + Runtime + Avg_Vote, data = train_data)
+summary(model)
+# Fit the model on the testing data
+#lm_test <- lm(paste(response, "~", paste(predictors, collapse = " + ")), data = test_data)
+#summary(lm_test)
+lm_train_predictions <- predict(model, newdata = train_data)
+lm_test_predictions <- predict(model, newdata = test_data)
+library(Metrics)
+lm_train_rmse <- rmse(train_data$Revenue, lm_train_predictions)
+lm_test_rmse <- rmse(test_data$Revenue, lm_test_predictions)
+cat("Linear Regression Train Data RMSE:", lm_train_rmse, "\n")
+cat("Linear Regression Test Data RMSE:", lm_test_rmse, "\n")
+```
+
+```{r ridge and lasso regression models}
+# Ridge Regression
+library(glmnet)
+ridge_model <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha=0, lambda=1)
+summary(ridge_model)
+#library(caret)
+#defaultSummary(ridge_model)$rsquared
+# Lasso Regression
+lasso_model <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha=1, lambda=1)
+summary(lasso_model)
+# Predictions
+ridge_train_predictions <- predict(ridge_model, newx = as.matrix(train_data[predictors]))
+lasso_train_predictions <- predict(lasso_model, newx = as.matrix(train_data[predictors]))
+ridge_test_predictions <- predict(ridge_model, newx = as.matrix(test_data[predictors]))
+lasso_test_predictions <- predict(lasso_model, newx = as.matrix(test_data[predictors]))
+```
+
+```{r ridge and lasso regression evaluation}
+# Root Mean Squared Error
+library(Metrics)
+ridge_train_rmse <- rmse(train_data$Revenue, ridge_train_predictions)
+ridge_test_rmse <- rmse(test_data$Revenue, ridge_test_predictions)
+lasso_train_rmse <- rmse(train_data$Revenue, lasso_train_predictions)
+lasso_test_rmse <- rmse(test_data$Revenue, lasso_test_predictions)
+#ridge_rmse <- sqrt(mean((test_data$Revenue - ridge_predictions)^2))
+#lasso_rmse <- sqrt(mean((test_data$Revenue - lasso_predictions)^2))
+# Print the results
+cat("Ridge Regression Train RMSE:", ridge_train_rmse, "\n")
+cat("Ridge Regression Test RMSE:", ridge_test_rmse, "\n")
+cat("Lasso Regression Train RMSE:", lasso_train_rmse, "\n")
+cat("Lasso Regression Test RMSE:", lasso_test_rmse, "\n")
+# R-squared
+#library(rsq)
+#ridge_r2 <- rsq(test_data$Revenue, ridge_predictions)
+#lasso_r2 <- rsq(test_data$Revenue, lasso_predictions)
+#cat("Ridge Regression R2 Score:", ridge_r2, "\n")
+#cat("Lasso Regression R2 Score:", lasso_r2, "\n")
+```
