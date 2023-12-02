@@ -159,53 +159,75 @@ summary(final_model)
 
 ```
 
-The features given in the final model using forward feature selection are Trailer_Likes, Trailer_Views, Vote_Count, Budget, Runtime ,Avg_Vote , popularity but we can see that popularity is not significant hence we will drop popularity and build the model again.
+The features given in the final model using forward feature selection are Trailer_Likes, Trailer_Views, Vote_Count, Budget, Runtime ,Avg_Vote , popularity but we can see that the intercept is not significant hence we will build the model again with different combinations of features.
 
 ```{r}
-lm_model_usingFFS <- lm(Revenue ~ Trailer_Likes + Trailer_Views + Vote_Count + Budget + Runtime + Avg_Vote, data = movie)
+lm_model_usingFFS <- lm(Revenue ~ Trailer_Views+Trailer_Likes+Vote_Count+Budget+Popularity, data = movie)
 
 # Summarize the model
 summary(lm_model_usingFFS)
 ```
-
-In the above model we can see that all the input features are significant and we have a good Multiple R-Squared value. 
-The p-value for the model is also significant indicating the model is a significant model.
-The Residual Std Error is around 5.4 Million which seems a little high as we cannot exactly predict the Revenue of a Movie as it depends on various other factors.
 ```{r}
-library(caret)
+influencePlot(lm_model_usingFFS)
+```
+Row 1,96,443,15996 have influence on our overall model.
 
-# Set the seed for reproducibility
-set.seed(123)
-
-# Define the predictors and response variable
-predictors <- c("Trailer_Likes", "Trailer_Views", "Vote_Count", "Budget", "Runtime", "Avg_Vote")
-response <- "Revenue"
-
-# Create a training and testing dataset
-train_index <- createDataPartition(movie$Revenue, p = 0.8, list = FALSE)
-train_data <- movie[train_index, ]
-test_data <- movie[-train_index, ]
-
-# Fit the model on the training data
-model <- lm(paste(response, "~", paste(predictors, collapse = " + ")), data = train_data)
-
-# Make predictions on the test data
-predictions <- predict(model, newdata = test_data)
-
-# Calculate RMSE
-rmse <- sqrt(mean((test_data$Revenue - predictions)^2))
-
-# Print the RMSE
-cat("Root Mean Squared Error (RMSE):", rmse, "\n")
-
+```{r}
+# Remove specified rows
+rows_to_remove <- c(15996, 443, 96, 64, 1)
+movie <- movie[-rows_to_remove, ]
 ```
 
 ```{r}
-lm_model <- lm(Revenue ~ Trailer_Views+Trailer_Likes, data = movie)
+lm_model <- lm(Revenue ~ Trailer_Views+Trailer_Likes+Vote_Count+Budget, data = movie)
 
 # Summarize the model
 summary(lm_model)
+
+influencePlot(lm_model)
 ```
+In the above model we can see that all the input features are significant and we have a good Multiple R-Squared value. 
+The p-value for the model is also significant indicating the model is a significant model.
+The Residual Std Error is around 5.4 Million which seems a little high as we cannot exactly predict the Revenue of a Movie as it depends on various other factors.
+
+Coefficients:
+
+Intercept (1.156e+06): The estimated intercept of the linear regression equation when all predictor variables are zero.
+Trailer_Views (3.803e-01): The estimated change in the response variable (Revenue) for a one-unit increase in "Trailer_Views" while holding other predictors constant.
+Trailer_Likes (2.420e+00): Similar to "Trailer_Views," this represents the estimated change in Revenue for a one-unit increase in "Trailer_Likes."
+Vote_Count (5.320e+02): Represents the estimated change in Revenue for a one-unit increase in "Vote_Count."
+Budget (7.071e-03): Represents the estimated change in Revenue for a one-unit increase in "Budget."
+Significance Codes:
+
+Multiple R-squared: The proportion of the variance in the dependent variable (Revenue) that is predictable from the independent variables (Trailer_Views, Trailer_Likes, Vote_Count, Budget). In your case, it's 90.06%.
+
+Adjusted R-squared: Similar to R-squared but adjusted for the number of predictors.
+
+F-statistic: Tests the overall significance of the model. In your case, it's 2.415e+04 with a very low p-value, suggesting the model is significant.
+
+The Residual Standard Error has also reduced after removal of influential points.
+```{r}
+library(car)
+# Check of Mullticollinearity
+# Calculate VIF for the linear regression model
+vif_values <- vif(lm_model)
+
+# Print the VIF values
+print(vif_values)
+```
+All values are below 10 indicating "No" Multicollinearity between features.
+
+```{r}
+# Check for Linear Relationship with the output variable
+avPlots(lm_model)
+```
+All features in our model seem to have linear relationship with the output variable.
+
+```{r}
+# Check for Normality of errors, Equal Variances of residuals and Independence of errors.
+plot(lm_model)
+```
+
 
 ```{r}
 library(caTools)
@@ -219,15 +241,24 @@ train_data <- subset(movie, split == TRUE)
 test_data <- subset(movie, split == FALSE)
 
 # Fit linear regression model on the training data
-lm_model <- lm(Revenue ~ Trailer_Views+Trailer_Likes, data = train_data)
+lm_model <- lm(Revenue ~ Trailer_Views + Trailer_Likes + Vote_Count + Budget, data = train_data)
+
+# Make predictions on the training data
+train_predictions <- predict(lm_model, newdata = train_data)
 
 # Make predictions on the test data
-predictions <- predict(lm_model, newdata = test_data)
+test_predictions <- predict(lm_model, newdata = test_data)
 
-# Calculate Root Mean Squared Error (RMSE)
-rmse <- sqrt(mean((test_data$Revenue - predictions)^2))
-cat("Root Mean Squared Error (RMSE):", rmse, "\n")
+# Calculate Root Mean Squared Error (RMSE) for test set
+test_rmse <- sqrt(mean((test_data$Revenue - test_predictions)^2))
+cat("Train Root Mean Squared Error (RMSE):", test_rmse, "\n")
+
+# Calculate Root Mean Squared Error (RMSE) for training set
+train_rmse <- sqrt(mean((train_data$Revenue - train_predictions)^2))
+cat("Test Root Mean Squared Error (RMSE):", train_rmse, "\n")
+
 ```
+
 
 ```{r}
 mean_revenue <- mean(movie$Revenue, na.rm = TRUE)
@@ -236,8 +267,6 @@ quantiles_revenue <- quantile(movie$Revenue, c(0.25, 0.5, 0.75), na.rm = TRUE)
 
 # Print the results
 cat("Mean Revenue:", mean_revenue, "\n")
-cat("Median Revenue:", median_revenue, "\n")
-cat("Quantiles (25%, 50%, 75%):", quantiles_revenue, "\n")
 ```
 
 ```{r}
