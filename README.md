@@ -11,9 +11,9 @@ Movies are a unique combination of artistic expression and commercial ventures. 
 
 By conducting a comprehensive analysis of these features, this research aims to identify patterns, relationships, and correlations that can offer valuable insights into revenue prediction. The findings of this study are expected to have substantial implications for movie production companies, investors, and stakeholders. They can leverage the predictive model developed in this project to make informed decisions regarding their movie investments, marketing strategies, and financial planning, ultimately contributing to the success and profitability of their ventures in the film industry.
 
-## Data Analysis and Findings:
+## Data Analysis and Findings :
 
-To Be Updated
+To Be Updated 
 
 ## Feature Engineeering and Feature Selection:
 
