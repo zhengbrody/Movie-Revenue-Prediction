@@ -292,28 +292,23 @@ cat("Linear Regression Test Data RMSE:", lm_test_rmse, "\n")
 library(glmnet)
 predictors <- c("Trailer_Likes", "Trailer_Views", "Vote_Count", "Budget")
 ridge_model <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha=0, lambda=1)
-summary(ridge_model)
-#library(caret)
-#defaultSummary(ridge_model)$rsquared
+
 # Lasso Regression
 lasso_model <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha=1, lambda=1)
-summary(lasso_model)
+
 # Predictions
 ridge_train_predictions <- predict(ridge_model, newx = as.matrix(train_data[predictors]))
 lasso_train_predictions <- predict(lasso_model, newx = as.matrix(train_data[predictors]))
 ridge_test_predictions <- predict(ridge_model, newx = as.matrix(test_data[predictors]))
 lasso_test_predictions <- predict(lasso_model, newx = as.matrix(test_data[predictors]))
-```
 
-```{r ridge and lasso regression evaluation}
 # Root Mean Squared Error
 library(Metrics)
 ridge_train_rmse <- rmse(train_data$Revenue, ridge_train_predictions)
 ridge_test_rmse <- rmse(test_data$Revenue, ridge_test_predictions)
 lasso_train_rmse <- rmse(train_data$Revenue, lasso_train_predictions)
 lasso_test_rmse <- rmse(test_data$Revenue, lasso_test_predictions)
-#ridge_rmse <- sqrt(mean((test_data$Revenue - ridge_predictions)^2))
-#lasso_rmse <- sqrt(mean((test_data$Revenue - lasso_predictions)^2))
+
 # Print the results
 cat("Linear Regression Train Data RMSE:", lm_train_rmse, "\n")
 cat("Linear Regression Test Data RMSE:", lm_test_rmse, "\n")
@@ -321,50 +316,43 @@ cat("Ridge Regression Train RMSE:", ridge_train_rmse, "\n")
 cat("Ridge Regression Test RMSE:", ridge_test_rmse, "\n")
 cat("Lasso Regression Train RMSE:", lasso_train_rmse, "\n")
 cat("Lasso Regression Test RMSE:", lasso_test_rmse, "\n")
-# R-squared
-#library(rsq)
-#ridge_r2 <- rsq(test_data$Revenue, ridge_predictions)
-#lasso_r2 <- rsq(test_data$Revenue, lasso_predictions)
-#cat("Ridge Regression R2 Score:", ridge_r2, "\n")
-#cat("Lasso Regression R2 Score:", lasso_r2, "\n")
 ```
 
 ```{r ridge and lasso regression tuning}
 library(glmnet)
+set.seed(42)
 
 # Prepare data
-X <- model.matrix( ~ ., data = train_data[predictors])
-y <- train_data$Revenue
+X <- as.matrix(train_data[predictors])
+y <- as.matrix(train_data$Revenue)
 
-# Create an alpha range
-lambdas <- seq(0, 1, length = 100)
+# Create an lambda range
+lambdas <- 10^seq(10, -1, length = 1000)
 
-# Create parameter grid
-param_grid <- expand.grid(lambda = lambdas)
-
-# Adjust parameters using cross validation
-ridge_cv_model <- cv.glmnet(X, y, alpha = 0, lambda = param_grid$lambda)
-lasso_cv_model <- cv.glmnet(X, y, alpha = 1, lambda = param_grid$lambda)
+# Find the best lambda using cross validation
+ridge_cv_model <- cv.glmnet(X, y, alpha = 0, lambda = lambdas)
+lasso_cv_model <- cv.glmnet(X, y, alpha = 1, lambda = lambdas)
 
 # Get the best lambda value
 best_lambda_ridge <- ridge_cv_model$lambda.min
-best_lambda_lasso <- ridge_cv_model$lambda.min
+best_lambda_lasso <- lasso_cv_model$lambda.min
 
 # Print the best lambda value
 cat("Best lambda value for Ridge Regression: ", best_lambda_ridge, "\n")
 cat("Best lambda value for Lasso Regression: ", best_lambda_lasso, "\n")
-```
 
-```{r ridge and lasso regression performance after tuning}
-# Ridge and Lasso Regression
-ridge_model_tuned <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha=0, lambda=best_lambda_ridge)
-lasso_model_tuned <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha=1, lambda=best_lambda_lasso)
+ridge_coef <- predict(ridge_model, type = "coefficients", s = best_lambda_ridge)
+lasso_coef <- predict(lasso_model, type = "coefficients", s = best_lambda_lasso)
+#cat("Ridge Regression Coefs: ", ridge_coef, "\n")
+#cat("Lasso Regression Coefs: ", lasso_coef, "\n")
+ridge_coef
+lasso_coef
 
 # Predictions
-ridgetuned_train_predictions <- predict(ridge_model_tuned, newx = as.matrix(train_data[predictors]))
-lassotuned_train_predictions <- predict(lasso_model_tuned, newx = as.matrix(train_data[predictors]))
-ridgetuned_test_predictions <- predict(ridge_model_tuned, newx = as.matrix(test_data[predictors]))
-lassotuned_test_predictions <- predict(lasso_model_tuned, newx = as.matrix(test_data[predictors]))
+ridgetuned_train_predictions <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(train_data[predictors]))
+ridgetuned_test_predictions <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(test_data[predictors]))
+lassotuned_train_predictions <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(train_data[predictors]))
+lassotuned_test_predictions <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(test_data[predictors]))
 
 # Root Mean Squared Error
 library(Metrics)
@@ -376,9 +364,64 @@ lassotuned_test_rmse <- rmse(test_data$Revenue, lassotuned_test_predictions)
 # Print the results
 cat("Linear Regression Train Data RMSE:", lm_train_rmse, "\n")
 cat("Linear Regression Test Data RMSE:", lm_test_rmse, "\n")
-cat("Ridge Regression Train RMSE (tuned):", ridge_train_rmse, "\n")
-cat("Ridge Regression Test RMSE (tuned):", ridge_test_rmse, "\n")
-cat("Lasso Regression Train RMSE (tuned):", lasso_train_rmse, "\n")
-cat("Lasso Regression Test RMSE (tuned):", lasso_test_rmse, "\n")
+cat("Ridge Regression Train RMSE (tuned):", ridgetuned_train_rmse, "\n")
+cat("Ridge Regression Test RMSE (tuned):", ridgetuned_test_rmse, "\n")
+cat("Lasso Regression Train RMSE (tuned):", lassotuned_train_rmse, "\n")
+cat("Lasso Regression Test RMSE (tuned):", lassotuned_test_rmse, "\n")
 
+plot(ridge_cv_model)
+plot(lasso_cv_model)
+
+```
+
+```{r ridge and lasso regression tuning2}
+library(glmnet)
+set.seed(42)
+
+# Create an lambda range
+lambdas1 <- 10^seq(1, -1, length = 1000)
+lambdas2 <- 10^seq(13, 4, length = 1000)
+
+# Find the best lambda using cross validation
+ridge_cv_model <- cv.glmnet(X, y, alpha = 0, lambda = lambdas1)
+lasso_cv_model <- cv.glmnet(X, y, alpha = 1, lambda = lambdas2)
+
+# Get the best lambda value
+best_lambda_ridge <- ridge_cv_model$lambda.min
+best_lambda_lasso <- lasso_cv_model$lambda.min
+
+# Print the best lambda value
+cat("Best lambda value for Ridge Regression: ", best_lambda_ridge, "\n")
+cat("Best lambda value for Lasso Regression: ", best_lambda_lasso, "\n")
+
+ridge_coef <- predict(ridge_model, type = "coefficients", s = best_lambda_ridge)
+lasso_coef <- predict(lasso_model, type = "coefficients", s = best_lambda_lasso)
+#cat("Ridge Regression Coefs: ", ridge_coef, "\n")
+#cat("Lasso Regression Coefs: ", lasso_coef, "\n")
+ridge_coef
+lasso_coef
+
+# Predictions
+ridgetuned_train_predictions <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(train_data[predictors]))
+ridgetuned_test_predictions <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(test_data[predictors]))
+lassotuned_train_predictions <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(train_data[predictors]))
+lassotuned_test_predictions <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(test_data[predictors]))
+
+# Root Mean Squared Error
+library(Metrics)
+ridgetuned_train_rmse <- rmse(train_data$Revenue, ridgetuned_train_predictions)
+ridgetuned_test_rmse <- rmse(test_data$Revenue, ridgetuned_test_predictions)
+lassotuned_train_rmse <- rmse(train_data$Revenue, lassotuned_train_predictions)
+lassotuned_test_rmse <- rmse(test_data$Revenue, lassotuned_test_predictions)
+
+# Print the results
+cat("Linear Regression Train Data RMSE:", lm_train_rmse, "\n")
+cat("Linear Regression Test Data RMSE:", lm_test_rmse, "\n")
+cat("Ridge Regression Train RMSE (tuned):", ridgetuned_train_rmse, "\n")
+cat("Ridge Regression Test RMSE (tuned):", ridgetuned_test_rmse, "\n")
+cat("Lasso Regression Train RMSE (tuned):", lassotuned_train_rmse, "\n")
+cat("Lasso Regression Test RMSE (tuned):", lassotuned_test_rmse, "\n")
+
+plot(ridge_cv_model)
+plot(lasso_cv_model)
 ```
