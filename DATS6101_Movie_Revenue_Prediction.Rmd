@@ -272,12 +272,9 @@ cat("Mean Revenue:", mean_revenue, "\n")
 
 ```{r linear regression evaluation}
 # Fit the model on the training data
-#lm_train <- lm(paste(response, "~", paste(predictors, collapse = " + ")), data = train_data)
 lm_model <- lm(Revenue ~ Trailer_Views + Trailer_Likes + Vote_Count + Budget, data = train_data)
-summary(lm_model)
-# Fit the model on the testing data
-#lm_test <- lm(paste(response, "~", paste(predictors, collapse = " + ")), data = test_data)
-#summary(lm_test)
+#summary(lm_model)
+# Predictions on training set & test set
 lm_train_predictions <- predict(lm_model, newdata = train_data)
 lm_test_predictions <- predict(lm_model, newdata = test_data)
 library(Metrics)
