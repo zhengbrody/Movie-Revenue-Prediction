@@ -1,0 +1,730 @@
+---
+title: "Movie Revenue Estimation and Decision Support"
+author: "Anand Raj, Dinesh Anand Thulasiraman, Kanishk Goel, Siyu Du"
+date: "2023-12-12"
+output:
+  rmdformats::readthedown:
+      toc_float: true
+      toc_depth: 3
+      number_sections: true
+      code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: 72        
+---
+
+```{r init, include=FALSE}
+knitr::opts_chunk$set(warning = F, results = "hide", message = F, echo = F)
+options(scientific=T, digits = 3) 
+```
+
+
+```{r Importing libraries and data, include=FALSE}
+library(dplyr)
+library(MASS)
+library(car)
+library(caTools)
+library(Metrics)
+library(glmnet)
+library(ggplot2)
+#install.packages("GGally")
+#install.packages(c("Metrics", "ggplot2", "rpart", "caret"))
+library(rpart)  # for decision trees
+library(rpart.plot)
+library(tidymodels)
+library(tidyr)
+library(caret)
+library(ezids)
+movies = read.csv("Movie_data.csv")
+movie = movies # Creating a copy of data frame
+```
+# Problem Statement
+
+The movie industry is a dynamic and complex environment where various factors influence a movie's success, particularly its revenue. In an era of high uncertainty and financial risk in the film production business, understanding the determinants of movie revenue is paramount for informed decision-making, investment strategies, and marketing planning.
+
+Movies are a unique combination of artistic expression and commercial ventures. To that end, this research investigates a multitude of features that contribute to the financial performance of a movie. These include aspects like genres, budget, runtime, vote average, and vote count. Each of these factors is scrutinized meticulously to unravel their individual and collective influence on movie revenue.
+
+By conducting a comprehensive analysis of these features, this project focuses on developing a robust regression model based on valuable insights through identifying patterns, relationships, and correlations. The findings of this study are expected to have substantial implications for movie production companies, investors, and stakeholders. They can leverage the predictive model developed in this project to make informed decisions regarding their movie investments, marketing strategies, and financial planning, ultimately contributing to the success and profitability of their ventures in the film industry.
+
+# Understanding the Data
+The movie dataset under analysis originates from The Movie Database (TMDb) API, replacing the original IMDb dataset due to a DMCA takedown request. This comprehensive dataset spans plot details, cast and crew information, budget, revenues, and more for thousands of films. The transition to TMDb includes improvements such as full credits for both cast and crew, listing actors in credit order, and updated revenue figures for greater accuracy. This particular dataset has been made
+available on [Kaggle](<https://www.kaggle.com/datasets/akshaypawar7/millions-of-movies>), which was the
+source of reference. The entire dataset contains movies from 1950s to 2020s. We have more than a million rows but for computational limitations, we will analyse using a sample of the data.
+The dataset sparks curiosity about predicting movie success and categorizing films by type, utilizing crew job titles for insights. Additionally, it prompts exploration into the dynamics between major film studios and independents, potentially through clustering analysis.
+
+<br/>
+This is what the first 5 rows of our dataset looks like:
+```{r, results='markup'}
+xkabledplyhead(movie,title="The first 5 rows of the dataset")
+```
+<br/>
+
+## SMART Questions
+
+1. Which feature is highly correlated with revenue?
+2. Being a regression problem, what is the best metric to
+    evaluate our model?     
+3. Which regression model gives out best results while prediction?
+4. What is the root mean squared error, r2 and other metrics for predicting the revenue of a movie?
+
+By using Statistical tests and models learned, we will try to predict the revenue of movie based on independent features.
+
+# Exploratory Data Analysis
+Reference guide for the columns in the dataset:
+
+1. title: Movie or show name
+2. genres: Content categories or themes
+3. original_language: Language of the original content
+4. popularity: Measure of audience interest
+5. release_date: Date of public availability
+6. budget: Cost of production
+7. revenue: Income generated from content
+8. runtime: Duration of the content
+9. status: Current release status
+10. vote_average: Average audience ratings
+11. vote_count: Number of audience votes
+12.trailer_views: Number of trailer views
+13. trailer_likes: Number of trailer likes
+
+Source: IMDB and Kaggle ("https://www.kaggle.com/datasets/alessandrolobello/the-ultimate-film-statistics-dataset-for-ml")
+
+This lets us identify which features are significant. 
+
+From the glossary, we have these subjective columns which are hard to interpret and use in modelling. So we remove them. 
+- id
+- overview
+- production_companies
+- tagline
+- credits
+- keywords
+- poster_path
+- backdrop_path
+- recommendations
+It is not a good idea to use these features as these are just metadata and do not tell anything about how well movie will perform. This is how our dataset looks now.
+
+## Data Cleaning
+
+```{r, results='markup'}
+remove_col <- c(1,5,7,13,16,17,18,19,20)
+movie <- movie[, -remove_col]
+new_column_names <- c("Title", "Genre", "Language", "Popularity", "Release_Date","Budget","Revenue","Runtime","Status","Avg_Vote","Vote_Count","Trailer_Views","Trailer_Likes")
+colnames(movie) <- new_column_names
+xkablesummary(movie)
+```
+
+Inferences:
+
+1. Budget of Movies are having value 0, which is not possible (Remove rows with budget 0)
+
+2. Revenue has negative values which is again not possible (Remove rows with revenue 0 or negative)
+
+3. Runtime of Movies are having value 0, which is not possible (Remove rows with runtime 0)
+
+4. Check for outliers and influential points in all the columns.
+
+5. Runtime had 0.004% missing values.
+
+6. These values were dropped as number of missing value is small.
+
+```{r, include=FALSE}
+#Checking for missing values in the data
+# Calculate the percentage of missing values in each column
+column_na_percentages <- colSums(is.na(movie)) / nrow(movie) * 100
+
+# Set a smaller font size
+smaller_font_size <- 0.8
+
+# Create a bar plot for the percentage of missing values in each column
+barplot(column_na_percentages, main = "Percentage of Missing Values in Each Column",
+        xlab = "Columns", ylab = "Percentage of Missing Values",
+        col = "lightcoral", border = "black", ylim = c(0, 100),
+        names.arg = names(column_na_percentages), las = 2, cex.names = smaller_font_size)
+
+print("Rows in Dataset before dropping rows with NA Values")
+print(nrow(movie))
+
+movie <- movie[complete.cases(movie), ]
+
+print("Rows in Dataset After dropping rows with NA Values")
+print(nrow(movie))
+```
+
+```{r, include=FALSE}
+print("Rows in Dataset before cleaning")
+print(nrow(movie))
+
+# 1. Remove rows with Budget less than or equal to 0
+movie <- movie[movie$Budget > 0, ]
+
+# 2. Remove rows with Revenue less than or equal to 0
+movie <- movie[movie$Revenue > 0, ]
+
+# 3. Remove rows with Runtime less than or equal to 0
+movie <- movie[movie$Runtime > 0, ]
+
+print("Rows in Dataset After cleaning")
+print(nrow(movie))
+```
+
+
+```{r, include=FALSE}
+selected_columns <- c("Popularity", "Budget", "Revenue", "Runtime", "Avg_Vote", "Vote_Count", "Trailer_Views","Trailer_Likes")
+
+box_plots_list <- list()
+
+# Create box plots for each selected column
+for (col in selected_columns) {
+  box_plot <- ggplot(movie, aes(y = get(col))) +
+    geom_boxplot(fill = "lightblue", color = "black", alpha = 0.7) +
+    labs(title = paste("Box Plot for", col), y = col) +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 15)) +
+    theme(axis.title = element_text(size = 12)) +
+    theme(axis.text = element_text(size = 10))
+  
+  box_plots_list[[col]] <- box_plot
+}
+
+for (col in selected_columns) {
+  print(box_plots_list[[col]])
+}
+```
+
+## Data Visulisation
+
+```{r}
+library(ggplot2)
+predictors <- c("Trailer_Likes", "Trailer_Views")
+scatter_plots <- lapply(predictors, function(var) {
+  ggplot(movie, aes(x = get(var), y = Revenue, color = Revenue)) +
+    geom_point() +
+    labs(title = paste("Scatter plot of", var, "vs. Revenue"),
+         x = var,
+         y = "Revenue",
+         color = "Revenue")
+})
+scatter_plots
+```
+```
+
+Inferences:
+
+Trailer Likes and Trailer views have linear relationship with the Output/Dependent variable "Revenue".
+
+**Visualization of Correlation Matrix using Heatmap**
+
+```{r}
+numeric_cols <- sapply(movie, is.numeric)
+cor_matrix <- cor(movie[, numeric_cols])
+cor_matrix
+library(corrplot)
+corrplot(cor_matrix, method = "color")
+```
+
+Inferences:
+
+1. Trailer Likes and Trailer views has high correlation with "Revenue".
+
+2. Vote Count and Budget have moderate correlation with "Revenue".
+
+3. Popularity, Runtime and Average Vote have poor correlation with "Revenue".
+
+```{r, include=FALSE}
+library(GGally)
+numeric_vars_subset <- c("Revenue", "Budget", "Popularity", "Runtime")
+ggpairs(movie[, numeric_vars_subset])
+```
+
+# Feature Selection and Model Building.
+
+## Stepwise Forward Feature Selection
+```{r Stepwise Forward Feature Selection}
+
+# Define your initial model
+initial_model <- lm(Revenue ~ 1, data = movie)  # Simple model with intercept only
+
+# Perform stepwise forward selection
+final_model <- stepAIC(initial_model, direction = "forward", scope = list(lower = ~1, upper = ~Popularity + Budget + Runtime + Avg_Vote + Vote_Count + Trailer_Views + Trailer_Likes), data = movie)
+
+# Display the final model summary
+summary(final_model)
+
+```
+
+The features given in the final model using forward feature selection are Trailer_Likes, Trailer_Views, Vote_Count, Budget, Runtime ,Avg_Vote , popularity but we can see that the intercept is not significant hence we will build the model again with different combinations of features.
+
+```{r}
+lm_model_usingFFS <- lm(Revenue ~ Trailer_Views+Trailer_Likes+Vote_Count+Budget+Popularity, data = movie)
+
+# Summarize the model
+summary(lm_model_usingFFS)
+```
+```{r}
+influencePlot(lm_model_usingFFS)
+```
+  
+Rows 1, 96, 443, 15996 have influence on our overall model and hence removed from the dataset.
+
+```{r,echo = FALSE}
+# Remove specified rows
+rows_to_remove <- c(15996, 443, 96, 64, 1)
+movie <- movie[-rows_to_remove, ]
+```
+
+## Final Linear Regression Model
+
+```{r Final Linear Regression Model}
+lm_model <- lm(Revenue ~ Trailer_Views+Trailer_Likes+Vote_Count+Budget, data = movie)
+
+# Summarize the model
+summary(lm_model)
+
+influencePlot(lm_model)
+```
+
+In the above model we can see that all the input features are significant and we have a good Multiple R-Squared value. 
+The p-value for the model is also significant indicating the model is a significant model.
+The Residual Std Error is around 3.9 Million which seems a reasonable as we cannot exactly predict the Revenue of a Movie as it depends on various other factors.
+
+Coefficients:
+
+Intercept:
+When interpreting from the linear regression model equation the following was noted.
+The intercept is estimated to be 601,900, which cannot be interpreted directly as each movie will make at least 601,900 dollars as one of the features is budget. Keeping budget 0 we cannot make 601,900 dollars.
+
+Trailer_Likes:
+The variable "Trailer_Likes" has an estimated coefficient of 2.8 meaning every like on trailer of the movie increases the revenur by 2.8 dollars.
+
+Trailer_Views:
+For the variable "Trailer_Views" the estimate is 0.259. This indicates that for every additional view of the movie trailer, the estimated revenue increases by $0.259.
+
+Vote_count:
+The estimated coefficient for "Vote_count" is 265.7. This implies that for every additional vote, the estimated revenue increases by $265.7.
+
+Budget:
+The variable "Budget" has an estimated coefficient of 0.003576. This suggests that for every additional dollar in the movie budget, the estimated revenue increases by $0.003576.
+
+Multiple R-squared: The proportion of the variance in the dependent variable (Revenue) that is predictable from the independent variables (Trailer_Views, Trailer_Likes, Vote_Count, Budget). In our case, it's 94.9%.
+
+F-statistic: Tests the overall significance of the model. In our case, it's 2.415e+04 with a very low p-value, suggesting the model is significant.
+
+The Residual Standard Error has also reduced after removal of influential points.
+
+### Linear Regression assumptions check
+
+**Check of Mullticollinearity**
+
+```{r Check of Mullticollinearity}
+# Check of Mullticollinearity
+# Calculate VIF for the linear regression model
+vif_values <- vif(lm_model)
+
+# Print the VIF values
+print(vif_values)
+```
+
+All values are below 10 indicating "No" Multicollinearity between features.
+
+**Check for Linear Relationship with the output variable**
+
+```{r Check for Linear Relationship with the output variable}
+# Check for Linear Relationship with the output variable
+avPlots(lm_model)
+```
+
+All features in our model seem to have linear relationship with the output variable.
+
+**Check for Normality of errors, Equal Variances of residuals and Independence of errors**
+
+```{r}
+# Check for Normality of errors, Equal Variances of residuals and Independence of errors.
+plot(lm_model)
+```
+```{r}
+
+# Set a random seed for reproducibility
+set.seed(123)
+
+# Split the data into training (80%) and testing (20%) sets
+split <- sample.split(movie$Revenue, SplitRatio = 0.8)
+train_data <- subset(movie, split == TRUE)
+test_data <- subset(movie, split == FALSE)
+
+# Fit linear regression model on the training data
+lm_model <- lm(Revenue ~ Trailer_Views + Trailer_Likes + Vote_Count + Budget, data = train_data)
+
+# Make predictions on the training data
+train_predictions <- predict(lm_model, newdata = train_data)
+
+# Make predictions on the test data
+test_predictions <- predict(lm_model, newdata = test_data)
+
+# Calculate Root Mean Squared Error (RMSE) for test set
+test_rmse <- sqrt(mean((test_data$Revenue - test_predictions)^2))
+cat("Train Root Mean Squared Error (RMSE):", test_rmse, "\n")
+
+# Calculate Root Mean Squared Error (RMSE) for training set
+train_rmse <- sqrt(mean((train_data$Revenue - train_predictions)^2))
+cat("Test Root Mean Squared Error (RMSE):", train_rmse, "\n")
+
+```
+
+
+```{r}
+mean_revenue <- mean(movie$Revenue, na.rm = TRUE)
+median_revenue <- median(movie$Revenue, na.rm = TRUE)
+quantiles_revenue <- quantile(movie$Revenue, c(0.25, 0.5, 0.75), na.rm = TRUE)
+
+# Print the results
+cat("Mean Revenue:", mean_revenue, "\n")
+```
+
+## Ridge and Lasso Regression
+
+Now let's try ridge and lasso regression to see how it will be different.
+
+### Baseline Model
+
+```{r linear regression evaluation, include=FALSE}
+# Fit the model on the training data
+library(caTools)
+lm_model <- lm(Revenue ~ Trailer_Views + Trailer_Likes + Vote_Count + Budget, data = train_data)
+#summary(lm_model)
+# Predictions on training set & test set
+lm_train_predictions <- predict(lm_model, newdata = train_data)
+lm_test_predictions <- predict(lm_model, newdata = test_data)
+library(Metrics)
+lm_train_rmse <- RMSE(train_data$Revenue, lm_train_predictions)
+lm_test_rmse <- RMSE(test_data$Revenue, lm_test_predictions)
+cat("Linear Regression Train Data RMSE:", lm_train_rmse, "\n")
+cat("Linear Regression Test Data RMSE:", lm_test_rmse, "\n")
+```
+
+```{r ridge and lasso regression models, include=TRUE}
+# Ridge Regression
+predictors <- c("Popularity", "Budget", "Runtime", "Avg_Vote", "Vote_Count", "Trailer_Views", "Trailer_Likes")
+ridge_model <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha=0, lambda=1)
+
+# Lasso Regression
+lasso_model <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha=1, lambda=1)
+
+# Predictions
+ridge_train_predictions <- predict(ridge_model, newx = as.matrix(train_data[predictors]))
+lasso_train_predictions <- predict(lasso_model, newx = as.matrix(train_data[predictors]))
+ridge_test_predictions <- predict(ridge_model, newx = as.matrix(test_data[predictors]))
+lasso_test_predictions <- predict(lasso_model, newx = as.matrix(test_data[predictors]))
+
+# Root Mean Squared Error
+ridge_train_rmse <- RMSE(train_data$Revenue, ridge_train_predictions)
+ridge_test_rmse <- RMSE(test_data$Revenue, ridge_test_predictions)
+lasso_train_rmse <- RMSE(train_data$Revenue, lasso_train_predictions)
+lasso_test_rmse <- RMSE(test_data$Revenue, lasso_test_predictions)
+
+# Print the results
+cat("Linear Regression Train Data RMSE:", lm_train_rmse, "\n")
+cat("Linear Regression Test Data RMSE:", lm_test_rmse, "\n")
+cat("Ridge Regression Train RMSE:", ridge_train_rmse, "\n")
+cat("Ridge Regression Test RMSE:", ridge_test_rmse, "\n")
+cat("Lasso Regression Train RMSE:", lasso_train_rmse, "\n")
+cat("Lasso Regression Test RMSE:", lasso_test_rmse, "\n")
+
+print(coef(ridge_model))
+print(coef(lasso_model))
+```
+
+Firstly the lambda was set as 1. The results of ridge regression and lasso regression are as follows:
+
+**Ridge Regression**:
+</br>Coefs:
+</br>Intercept, `r predictors`
+</br>`r coef(ridge_model)`
+</br>RMSE: `r ridge_test_rmse`
+</br>R-squared: `r 1-sum((ridge_test_predictions - test_data$Revenue)^2)/sum((test_data$Revenue - mean(test_data$Revenue))^2)`
+
+**Lasso Regression**:
+</br>Coefs:
+</br>Intercept, `r predictors`
+</br>`r coef(lasso_model)`
+</br>RMSE: `r lasso_test_rmse`
+</br>R-squared: `r 1-sum((lasso_test_predictions - test_data$Revenue)^2)/sum((test_data$Revenue - mean(test_data$Revenue))^2)`
+
+### Model1
+```{r ridge and lasso regression tuning, include=FALSE}
+set.seed(42)
+
+# Prepare data
+X <- as.matrix(train_data[predictors])
+y <- as.matrix(train_data$Revenue)
+
+# Create an lambda range
+lambdas <- 10^seq(10, -1, length = 1000)
+
+# Find the best lambda using cross validation
+ridge_cv_model <- cv.glmnet(X, y, alpha = 0, lambda = lambdas)
+lasso_cv_model <- cv.glmnet(X, y, alpha = 1, lambda = lambdas)
+
+# Get the best lambda value
+best_lambda_ridge <- ridge_cv_model$lambda.min
+best_lambda_lasso <- lasso_cv_model$lambda.min
+
+# Print the best lambda value
+cat("Best lambda value for Ridge Regression: ", best_lambda_ridge, "\n")
+cat("Best lambda value for Lasso Regression: ", best_lambda_lasso, "\n")
+
+ridge_coef <- predict(ridge_cv_model, type = "coefficients", s = best_lambda_ridge)
+lasso_coef <- predict(lasso_cv_model, type = "coefficients", s = best_lambda_lasso)
+#cat("Ridge Regression Coefs: ", ridge_coef, "\n")
+#cat("Lasso Regression Coefs: ", lasso_coef, "\n")
+ridge_coef
+lasso_coef
+
+# Predictions
+ridgetuned_train_predictions <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(train_data[predictors]))
+ridgetuned_test_predictions <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(test_data[predictors]))
+lassotuned_train_predictions <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(train_data[predictors]))
+lassotuned_test_predictions <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(test_data[predictors]))
+
+# Root Mean Squared Error
+ridgetuned_train_rmse <- RMSE(train_data$Revenue, ridgetuned_train_predictions)
+ridgetuned_test_rmse <- RMSE(test_data$Revenue, ridgetuned_test_predictions)
+lassotuned_train_rmse <- RMSE(train_data$Revenue, lassotuned_train_predictions)
+lassotuned_test_rmse <- RMSE(test_data$Revenue, lassotuned_test_predictions)
+
+# Print the results
+cat("Linear Regression Train Data RMSE:", lm_train_rmse, "\n")
+cat("Linear Regression Test Data RMSE:", lm_test_rmse, "\n")
+cat("Ridge Regression Train RMSE (tuned):", ridgetuned_train_rmse, "\n")
+cat("Ridge Regression Test RMSE (tuned):", ridgetuned_test_rmse, "\n")
+cat("Lasso Regression Train RMSE (tuned):", lassotuned_train_rmse, "\n")
+cat("Lasso Regression Test RMSE (tuned):", lassotuned_test_rmse, "\n")
+
+```
+Then, lambda was assigned a series of values between 0.1 and ten squares, and cross-validation was used to determine the optimal lambda value.
+
+**Ridge Regression**:
+</br>Best lambda: `r best_lambda_ridge`
+</br>Coeffs:
+</br>Intercept, `r predictors`
+</br>`r ridge_coef`
+</br>RMSE: `r ridgetuned_test_rmse`
+</br>R-squared: `r 1-sum((ridgetuned_test_predictions - test_data$Revenue)^2)/sum((test_data$Revenue - mean(test_data$Revenue))^2)`
+
+**Lasso Regression**:
+</br>Best lambda: `r best_lambda_lasso`
+</br>Coeffs:
+</br>Intercept, `r predictors`
+</br>`r lasso_coef`
+</br>RMSE: `r lassotuned_test_rmse`
+</br>R-squared: `r 1-sum((lassotuned_test_predictions - test_data$Revenue)^2)/sum((test_data$Revenue - mean(test_data$Revenue))^2)`
+
+### Model2
+```{r ridge and lasso regression tuning2}
+set.seed(42)
+
+# Create an lambda range
+lambdas1 <- 10^seq(1, -1, length = 1000)
+lambdas2 <- 10^seq(13, 4, length = 1000)
+
+# Find the best lambda using cross validation
+ridge_cv_model <- cv.glmnet(X, y, alpha = 0, lambda = lambdas1)
+lasso_cv_model <- cv.glmnet(X, y, alpha = 1, lambda = lambdas2)
+
+# Get the best lambda value
+best_lambda_ridge <- ridge_cv_model$lambda.min
+best_lambda_lasso <- lasso_cv_model$lambda.min
+
+# Print the best lambda value
+cat("Best lambda value for Ridge Regression: ", best_lambda_ridge, "\n")
+cat("Best lambda value for Lasso Regression: ", best_lambda_lasso, "\n")
+
+ridge_coef <- predict(ridge_cv_model, type = "coefficients", s = best_lambda_ridge)
+lasso_coef <- predict(lasso_cv_model, type = "coefficients", s = best_lambda_lasso)
+#cat("Ridge Regression Coefs: ", ridge_coef, "\n")
+#cat("Lasso Regression Coefs: ", lasso_coef, "\n")
+ridge_coef
+lasso_coef
+
+# Predictions
+ridgetuned_train_predictions <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(train_data[predictors]))
+ridgetuned_test_predictions <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(test_data[predictors]))
+lassotuned_train_predictions <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(train_data[predictors]))
+lassotuned_test_predictions <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(test_data[predictors]))
+
+# Root Mean Squared Error
+ridgetuned_train_rmse <- RMSE(train_data$Revenue, ridgetuned_train_predictions)
+ridgetuned_test_rmse <- RMSE(test_data$Revenue, ridgetuned_test_predictions)
+lassotuned_train_rmse <- RMSE(train_data$Revenue, lassotuned_train_predictions)
+lassotuned_test_rmse <- RMSE(test_data$Revenue, lassotuned_test_predictions)
+
+# Print the results
+cat("Linear Regression Train Data RMSE:", lm_train_rmse, "\n")
+cat("Linear Regression Test Data RMSE:", lm_test_rmse, "\n")
+cat("Ridge Regression Train RMSE (tuned):", ridgetuned_train_rmse, "\n")
+cat("Ridge Regression Test RMSE (tuned):", ridgetuned_test_rmse, "\n")
+cat("Lasso Regression Train RMSE (tuned):", lassotuned_train_rmse, "\n")
+cat("Lasso Regression Test RMSE (tuned):", lassotuned_test_rmse, "\n")
+
+#plot(ridge_cv_model)
+#plot(lasso_cv_model)
+```
+Finally, let's use different value ranges to determine the optimal lambda values of ridge regression and lasso regression respectively, since their optimal lambda values are so different.
+
+**Ridge Regression**:
+</br>Best lambda: `r best_lambda_ridge`
+</br>Coeffs:
+</br>Intercept, `r predictors`
+</br>`r ridge_coef`
+</br>RMSE: `r ridgetuned_test_rmse`
+</br>R-squared: `r 1-sum((ridgetuned_test_predictions - test_data$Revenue)^2)/sum((test_data$Revenue - mean(test_data$Revenue))^2)`
+
+**Lasso Regression**:
+</br>Best lambda: `r best_lambda_lasso`
+</br>Coeffs:
+</br>Intercept, `r predictors`
+</br>`r lasso_coef`
+</br>RMSE: `r lassotuned_test_rmse`
+</br>R-squared: `r 1-sum((lassotuned_test_predictions - test_data$Revenue)^2)/sum((test_data$Revenue - mean(test_data$Revenue))^2)`
+
+
+## Decision tree regression
+
+Starting by performing a 4:1 Train-test Split of Dataset. Then we go ahead and build the decision tree regression model.
+```{r, include=FALSE}
+
+split <- sample.split(movie$Revenue, SplitRatio = 0.8)
+train_data <- subset(movie, split == TRUE)
+test_data <- subset(movie, split == FALSE)
+
+# Model0 with all features 
+set.seed(1)
+dt_model0 <- rpart(Revenue ~ Popularity + Budget + Runtime + Avg_Vote + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="anova")
+
+y_pred <- dt_model0%>%predict(test_data)
+printcp(dt_model0)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
+```
+```{r}
+rpart.plot(dt_model0)
+plotcp(dt_model0)
+```
+
+### Summary for dt_model0
+
+The regression tree was built using the specified formula with "Trailer_Likes" as the primary variable and using all present features. The tree's complexity is controlled by the complexity parameter, and the cross-validated error is used to assess the model's performance. The reported RMSE of `r RMSE(test_data$Revenue,y_pred)` gives an estimate of the average prediction error on the training data. The CP values suggests that further pruning beyond a certain point (determined by the complexity parameter) may not significantly improve model performance.
+
+```{r, include=FALSE}
+# Model1 including only significant features
+set.seed(1)
+dt_model1 <- rpart(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="anova")
+
+y_pred <- dt_model1%>%predict(test_data)
+
+plotcp(dt_model1)
+printcp(dt_model1)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
+
+plot(test_data$Revenue, y_pred, col = "blue", pch = 20, main = "Actual vs. Predicted", xlab = "Actual", ylab = "Predicted")
+summary(dt_model1)
+```
+```{r}
+rpart.plot(dt_model1, box.palette = "Reds", snip = TRUE, shadow.col = 'gray', roundint = TRUE, digits = 1)
+```
+
+### Summary for dt_model1
+
+The model1 was created using significant factors.
+The model1 analysis reveals valuable insights into the factors influencing revenue in the examined dataset. The constructed regression tree, utilizing variables such as Budget, Vote_Count, Trailer_Views, and Trailer_Likes, prioritizes Trailer_Likes as the primary determinant of revenue. The tree's structure, with a depth of 6 nodes, provides a detailed segmentation of the dataset, emphasizing the significance of Trailer_Likes in predicting revenue variations.
+
+Node analysis showcases the mean revenue and mean squared error (MSE) at each node, offering a granular understanding of the model's predictions. The root mean squared error (RMSE) of `r RMSE(test_data$Revenue,y_pred)` provides a measure of the overall model accuracy.
+
+Variable importance ranking underscores the dominance of Trailer_Likes, followed by Trailer_Views, Vote_Count, and Budget. This suggests that while all variables contribute to revenue prediction, Trailer_Likes plays a pivotal role.
+
+The model interpretation underscores the actionable insight that increasing Trailer_Likes is crucial for revenue enhancement. Lower Trailer_Likes correspond to diminished predicted revenue, emphasizing the marketing and promotional efforts' potential impact on revenue generation.
+
+
+```{r, include=FALSE}
+# Model2 with max depth 1
+set.seed(1)
+dt_model2 <- rpart(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="anova", control = list(maxdepth = 1))
+y_pred <- dt_model2%>%predict(test_data)
+
+plotcp(dt_model2)
+printcp(dt_model2)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
+```
+```{r}
+rpart.plot(dt_model2, box.palette = "Greens", snip = TRUE, shadow.col = 'gray', roundint = TRUE, digits = 1)
+```
+
+### Summary for dt_model2
+
+The regression tree analysis was conducted on the "Revenue" variable using the predictors "Budget," "Vote_Count," "Trailer_Views," and "Trailer_Likes" with a maximum depth limited to 1. The key findings are as follows:
+
+The root node error for the model is 3e+14, based on 8528 observations. The tree structure indicates that only the variable "Trailer_Likes" is utilized in the construction of the tree. The primary split occurs at a value of 6120000 for "Trailer_Likes."
+
+The resulting tree consists of two terminal nodes (Node 2 and Node 3). Node 2 represents observations with lower Trailer_Likes values, yielding a mean revenue of 6.26e+06 and a relatively lower MSE. On the other hand, Node 3, with higher Trailer_Likes values, has a mean revenue of 3.74e+07 and a higher MSE.
+
+The overall Root Mean Squared Error (RMSE) of the model is `r RMSE(test_data$Revenue,y_pred)`.
+
+The variable importance ranking suggests that "Trailer_Likes" is the most influential predictor, followed by "Trailer_Views," "Vote_Count," and "Budget."
+
+```{r, include=FALSE}
+# Model3 with max depth 2
+set.seed(1)
+dt_model3 <- rpart(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="anova", control = list(maxdepth = 2))
+y_pred <- dt_model3%>%predict(test_data)
+rpart.plot(dt_model3)
+plotcp(dt_model3)
+printcp(dt_model3)
+summary(dt_model3)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
+
+```
+```{r}
+rpart.plot(dt_model3, box.palette = "Purples", snip = TRUE, shadow.col = 'gray', roundint = TRUE, digits = 1)
+```
+<br/>
+A similar tree was built with max_depth=2 giving bad results.
+```{r, include=FALSE}
+# Random Forests
+library(randomForest)
+rf_model <- randomForest(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, type='regression', nTree=100)
+
+y_pred <- predict(rf_model, test_data)
+
+print(rf_model)
+importance(rf_model)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
+summary(rf_model)
+```
+
+```{r}
+plot(rf_model, main="Random Forests Model")
+varImpPlot(rf_model, bg = "purple", cex=1, pch=22, main="RF Feature Importance")
+```
+
+### Summary for Random Forest model
+
+The random forest regression analysis was conducted with the formula Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, utilizing 500 trees in the forest. The model's type is set to regression, and it tried one variable at each split. The mean of squared residuals, a measure of prediction error, is 3.07e+13, indicating the average squared difference between predicted and actual values. Additionally, the random forest explains approximately 90% of the variance in the Revenue variable, showcasing its substantial predictive power.
+
+The Root Mean Squared Error (RMSE) for the random forest model is `r RMSE(test_data$Revenue,y_pred)`, which represents the average difference between the predicted and actual revenue values. A lower RMSE indicates a more accurate model. In this case, the relatively low RMSE suggests that the random forest model provides a good fit to the training data.
+
+The utilization of a random forest, which combines predictions from multiple decision trees, often results in a robust and accurate predictive model. The % Var explained value of 90 suggests that the model effectively captures the underlying patterns in the data, demonstrating a high level of explanatory capability. This performance makes the random forest a promising tool for predicting Revenue based on the provided predictor variables. Overall, the random forest regression model appears to be a strong and reliable approach for predicting Revenue, providing valuable insights for decision-making in scenarios involving budget, vote count, trailer views, and trailer likes.
+
+# Conclusion
+
+1. The project aimed to address the complex and dynamic nature of the movie industry by developing a regression model to estimate movie revenue. The data analysis and model building process involved exploratory data analysis, data cleaning, and feature selection.
+  
+2. The project addressed SMART questions, identified influential points, and conducted rigorous statistical tests. After feature selection and model building the best R^2 value achieved was 0.92 with the features Trailer Views, Trailer Likes, Vote Count, Budget
+
+  
+3. The linear regression model, after thorough feature selection, highlighted the significance of Trailer_Likes, Trailer_Views, Vote_Count, and Budget in predicting movie revenue. The model achieved a Multiple R-squared value of 94.9%, indicating its strong explanatory power.
+
+4. The ridge and lasso regression techniques were employed to fine-tune the linear regression model, improving its performance on the test data. After adjusting to the appropriate parameters, ridge and lasso regression improved the performance on the test data.
+
+5. The project successfully navigated the complexities of movie revenue estimation, leveraging advanced statistical models to provide actionable insights for stakeholders in the movie production business.
+
+6. The combination of linear regression, decision tree regression, and random forest regression offered a comprehensive understanding of the factors influencing movie revenue and paved the way for informed decision support in the industry with an average RMSE of 3.5 million dollars. Undoubtedly, the linear regression model performs better than trees.
+
+7. The model can be improved using boosting methods (Ensemble Methods) to get a better performance.
+
