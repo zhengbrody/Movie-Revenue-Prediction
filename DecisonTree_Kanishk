@@ -1,104 +1,124 @@
-**Kanishk decision tree**
-{r}
-library(rpart)
+## Decision tree regression
+
+Starting by performing a 4:1 Train-test Split of Dataset. Then we go ahead and build the decision tree regression model.
+```{r, include=FALSE}
+
+split <- sample.split(movie$Revenue, SplitRatio = 0.8)
+train_data <- subset(movie, split == TRUE)
+test_data <- subset(movie, split == FALSE)
+
+# Model0 with all features 
 set.seed(1)
-model_dt_fit <- rpart(Revenue ~ Popularity + Budget + Runtime + Avg_Vote + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="class", control = list(maxdepth = 4))
-predictions <- model_dt_fit%>%predict(test_data)
-library(tidymodels)
-library(tidyr)
-library(MASS)
-metrics <- metric_set(rmse, rsq)
-model_performance <- test_data %>%
- mutate(predictions = predictions) %>%
- metrics(truth = medv, estimate = predictions)
+dt_model0 <- rpart(Revenue ~ Popularity + Budget + Runtime + Avg_Vote + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="anova")
 
-print(model_performance)
-printcp(model_dt_fit)
-plotcp(model_dt_fit)
+y_pred <- dt_model0%>%predict(test_data)
+printcp(dt_model0)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
+```
+```{r}
+rpart.plot(dt_model0)
+plotcp(dt_model0)
+```
 
-sqrt(mean((test_data$Revenue - predictions)^2))
+### Summary for dt_model0
+
+The regression tree was built using the specified formula with "Trailer_Likes" as the primary variable and using all present features. The tree's complexity is controlled by the complexity parameter, and the cross-validated error is used to assess the model's performance. The reported RMSE of `r RMSE(test_data$Revenue,y_pred)` gives an estimate of the average prediction error on the training data. The CP values suggests that further pruning beyond a certain point (determined by the complexity parameter) may not significantly improve model performance.
+
+```{r, include=FALSE}
+# Model1 including only significant features
+set.seed(1)
+dt_model1 <- rpart(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="anova")
+
+y_pred <- dt_model1%>%predict(test_data)
+
+plotcp(dt_model1)
+printcp(dt_model1)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
+
+plot(test_data$Revenue, y_pred, col = "blue", pch = 20, main = "Actual vs. Predicted", xlab = "Actual", ylab = "Predicted")
+summary(dt_model1)
+```
+```{r}
+rpart.plot(dt_model1, box.palette = "Reds", snip = TRUE, shadow.col = 'gray', roundint = TRUE, digits = 1)
+```
+
+### Summary for dt_model1
+
+The model1 was created using significant factors.
+The model1 analysis reveals valuable insights into the factors influencing revenue in the examined dataset. The constructed regression tree, utilizing variables such as Budget, Vote_Count, Trailer_Views, and Trailer_Likes, prioritizes Trailer_Likes as the primary determinant of revenue. The tree's structure, with a depth of 6 nodes, provides a detailed segmentation of the dataset, emphasizing the significance of Trailer_Likes in predicting revenue variations.
+
+Node analysis showcases the mean revenue and mean squared error (MSE) at each node, offering a granular understanding of the model's predictions. The root mean squared error (RMSE) of `r RMSE(test_data$Revenue,y_pred)` provides a measure of the overall model accuracy.
+
+Variable importance ranking underscores the dominance of Trailer_Likes, followed by Trailer_Views, Vote_Count, and Budget. This suggests that while all variables contribute to revenue prediction, Trailer_Likes plays a pivotal role.
+
+The model interpretation underscores the actionable insight that increasing Trailer_Likes is crucial for revenue enhancement. Lower Trailer_Likes correspond to diminished predicted revenue, emphasizing the marketing and promotional efforts' potential impact on revenue generation.
 
 
-{r}
-install.packages(c("Metrics", "ggplot2", "rpart", "caret"))
-library(Metrics)
-library(ggplot2)
-library(rpart)
-library(caret)
-library(caTools)
-# Assuming you have loaded the required libraries and have the dataframe 'df_no_gen'
-df_no_gen <- movie
-# Define dependent and independent variables
-dependent <- df_no_gen$Revenue
-independent <- df_no_gen[, 1:7]
+```{r, include=FALSE}
+# Model2 with max depth 1
+set.seed(1)
+dt_model2 <- rpart(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="anova", control = list(maxdepth = 1))
+y_pred <- dt_model2%>%predict(test_data)
 
-# Train-test split
-set.seed(42)  # equivalent to random_state=42 in Python
-split <- sample.split(dependent, SplitRatio = 0.8)
-train_data <- subset(df_no_gen, split == TRUE)
-test_data <- subset(df_no_gen, split == FALSE)
+plotcp(dt_model2)
+printcp(dt_model2)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
+```
+```{r}
+rpart.plot(dt_model2, box.palette = "Greens", snip = TRUE, shadow.col = 'gray', roundint = TRUE, digits = 1)
+```
 
-# Linear Regression
-model_lm <- lm(Revenue ~ Popularity + Budget + Runtime + Avg_Vote + Vote_Count + Trailer_Views + Trailer_Likes, data = train_data)
+### Summary for dt_model2
 
-# Prediction by LM
-y_pred <- predict(model_lm, newdata = test_data)
+The regression tree analysis was conducted on the "Revenue" variable using the predictors "Budget," "Vote_Count," "Trailer_Views," and "Trailer_Likes" with a maximum depth limited to 1. The key findings are as follows:
 
-# Performance Metrics for LM
-library(Metrics)  # for r2 and other metrics
-r2 <- r2_Score(test_data$Revenue, y_pred)
-mse <- rmse(test_data$Revenue, y_pred)
-rmse <- sqrt(mse)
-cat("R2 Score:", r2, "\n")
-cat("Mean Squared Error:", mse, "\n")
-cat("Root Mean Squared Error:", rmse, "\n")
+The root node error for the model is 3e+14, based on 8528 observations. The tree structure indicates that only the variable "Trailer_Likes" is utilized in the construction of the tree. The primary split occurs at a value of 6120000 for "Trailer_Likes."
 
-# Barplot
-library(ggplot2)  # for ggplot
-ggplot(df_no_gen, aes(x = budget, y = revenue)) + geom_bar(stat = "identity")
+The resulting tree consists of two terminal nodes (Node 2 and Node 3). Node 2 represents observations with lower Trailer_Likes values, yielding a mean revenue of 6.26e+06 and a relatively lower MSE. On the other hand, Node 3, with higher Trailer_Likes values, has a mean revenue of 3.74e+07 and a higher MSE.
 
-# Decision Tree
-library(rpart)  # for decision tree
-model_dt <- rpart(revenue ~ ., data = train_data)
+The overall Root Mean Squared Error (RMSE) of the model is `r RMSE(test_data$Revenue,y_pred)`.
 
-# Prediction by DT
-y_pred_dt <- predict(model_dt, newdata = test_data)
+The variable importance ranking suggests that "Trailer_Likes" is the most influential predictor, followed by "Trailer_Views," "Vote_Count," and "Budget."
 
-# Performance Metrics for DT
-r2_dt <- r2_score(test_data$revenue, y_pred_dt)
-mse_dt <- mean_squared_error(test_data$revenue, y_pred_dt)
-rmse_dt <- sqrt(mse_dt)
-cat("Decision Tree - R2 Score:", r2_dt, "\n")
-cat("Decision Tree - Mean Squared Error:", mse_dt, "\n")
-cat("Decision Tree - Root Mean Squared Error:", rmse_dt, "\n")
+```{r, include=FALSE}
+# Model3 with max depth 2
+set.seed(1)
+dt_model3 <- rpart(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, method="anova", control = list(maxdepth = 2))
+y_pred <- dt_model3%>%predict(test_data)
+rpart.plot(dt_model3)
+plotcp(dt_model3)
+printcp(dt_model3)
+summary(dt_model3)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
 
-# Hyperparameter tuning using rpart
-library(caret)  # for RandomizedSearchCV equivalent
-set.seed(42)  # equivalent to random_state=42 in Python
+```
+```{r}
+rpart.plot(dt_model3, box.palette = "Purples", snip = TRUE, shadow.col = 'gray', roundint = TRUE, digits = 1)
+```
+<br/>
+A similar tree was built with max_depth=2 giving bad results.
+```{r, include=FALSE}
+# Random Forests
+library(randomForest)
+rf_model <- randomForest(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, data=train_data, type='regression', nTree=100)
 
-# Create the grid
-param <- list(
-  split=c('information','gini'),
-  maxdepth=c(5, 10, 15),
-  minsplit=c(1, 2, 5),
-  minbucket=c(1, 2, 5)
-)
+y_pred <- predict(rf_model, test_data)
 
-# RandomizedSearchCV
-ctrl <- trainControl(method = "cv", number = 5)
-grid <- train(revenue ~ ., data = train_data, method = "rpart", tuneGrid = param, trControl = ctrl)
+print(rf_model)
+importance(rf_model)
+cat("Root Mean Squared Error:", RMSE(test_data$Revenue,y_pred), "\n")
+summary(rf_model)
+```
 
-# Print best parameters
-cat("Best parameters:")
-print(grid$bestTune)
+```{r}
+plot(rf_model, main="Random Forests Model")
+varImpPlot(rf_model, bg = "purple", cex=1, pch=22, main="RF Feature Importance")
+```
 
-# Prediction by tuned DT
-y_pred_dt_tuned <- predict(grid, newdata = test_data)
+### Summary for Random Forest model
 
-# Performance Metrics for tuned DT
-r2_dt_tuned <- r2_score(test_data$revenue, y_pred_dt_tuned)
-mse_dt_tuned <- mean_squared_error(test_data$revenue, y_pred_dt_tuned)
-rmse_dt_tuned <- sqrt(mse_dt_tuned)
-cat("Tuned Decision Tree - R2 Score:", r2_dt_tuned, "\n")
-cat("Tuned Decision Tree - Mean Squared Error:", mse_dt_tuned, "\n")
-cat("Tuned Decision Tree - Root Mean Squared Error:", rmse_dt_tuned, "\n")
+The random forest regression analysis was conducted with the formula Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes, utilizing 500 trees in the forest. The model's type is set to regression, and it tried one variable at each split. The mean of squared residuals, a measure of prediction error, is 3.07e+13, indicating the average squared difference between predicted and actual values. Additionally, the random forest explains approximately 90% of the variance in the Revenue variable, showcasing its substantial predictive power.
+
+The Root Mean Squared Error (RMSE) for the random forest model is `r RMSE(test_data$Revenue,y_pred)`, which represents the average difference between the predicted and actual revenue values. A lower RMSE indicates a more accurate model. In this case, the relatively low RMSE suggests that the random forest model provides a good fit to the training data.
+
+The utilization of a random forest, which combines predictions from multiple decision trees, often results in a robust and accurate predictive model. The % Var explained value of 90 suggests that the model effectively captures the underlying patterns in the data, demonstrating a high level of explanatory capability. This performance makes the random forest a promising tool for predicting Revenue based on the provided predictor variables. Overall, the random forest regression model appears to be a strong and reliable approach for predicting Revenue, providing valuable insights for decision-making in scenarios involving budget, vote count, trailer views, and trailer likes.
