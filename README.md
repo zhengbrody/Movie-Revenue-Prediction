@@ -30,5 +30,4 @@ To Be Updated
 ## Results and Conclusions:
 
 
-- Check assumption for LR
 
