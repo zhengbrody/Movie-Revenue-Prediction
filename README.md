@@ -51,6 +51,11 @@ These values were dropped as number of missing value is small.
 
 ### Data Visulisation:
 ![image](https://github.com/anandr07/DATS6101-P2-Movie-Revenue-Prediction/assets/66896800/32d693c0-87be-416b-b6bc-4cc9188967a8)
+![image](https://github.com/anandr07/DATS6101-P2-Movie-Revenue-Prediction/assets/66896800/f63e27b7-cbe6-4e81-bdde-4044f0e25328)
+Inferences:
+
+Trailer Likes and Trailer views have linear relationship with the Output/Dependent variable “Revenue”.
+
 
 ## Feature Engineeering and Feature Selection:
 
