@@ -39,7 +39,7 @@ This lets us identify which features are significant.
 
 From the glossary, we have these subjective columns which are hard to interpret and use in modelling. So we remove them. - id - overview - production_companies - tagline - credits - keywords - poster_path - backdrop_path - recommendations It is not a good idea to use these features as these are just metadata and do not tell anything about how well movie will perform. This is how our dataset looks now.
 
-Data Cleaning:
+### Data Cleaning:
 Inferences:
 
 Budget of Movies are having value 0, which is not possible (Remove rows with budget 0)
@@ -49,7 +49,7 @@ Check for outliers and influential points in all the columns.
 Runtime had 0.004% missing values.
 These values were dropped as number of missing value is small.
 
-Data Visulisation:
+### Data Visulisation:
 ![image](https://github.com/anandr07/DATS6101-P2-Movie-Revenue-Prediction/assets/66896800/32d693c0-87be-416b-b6bc-4cc9188967a8)
 
 ## Feature Engineeering and Feature Selection:
