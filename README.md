@@ -58,6 +58,7 @@ Trailer Likes and Trailer views have linear relationship with the Output/Depende
 
 ### Visualization of Correlation Matrix using Heatmap
 ![image](https://github.com/anandr07/DATS6101-P2-Movie-Revenue-Prediction/assets/66896800/d9c04a24-00cc-407b-b162-023e94861281)
+
 Inferences:
 
 Trailer Likes and Trailer views has high correlation with “Revenue”.
