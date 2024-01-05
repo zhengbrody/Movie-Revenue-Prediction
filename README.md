@@ -222,9 +222,7 @@ The variable importance ranking suggests that “Trailer_Likes” is the most in
 
 A similar tree was built with max_depth=2 giving bad results.
 
-#### Summary for Random Forest model
-
-![image](https://github.com/anandr07/DATS6101-P2-Movie-Revenue-Prediction/assets/66896800/260f189b-c0f2-4c95-b8b9-ddfb3f3ee82d)
+#### RF Feature Importance
 
 ![image](https://github.com/anandr07/DATS6101-P2-Movie-Revenue-Prediction/assets/66896800/5bfb0051-2e2c-4a66-8dde-6a2a9ecfb435)
 
