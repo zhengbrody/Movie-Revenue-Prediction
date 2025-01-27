@@ -1,0 +1,390 @@
+---
+title: "MovieRevenue"
+author: "zheng dong"
+date: "2025-01-26"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F, results = "hide", message = F, echo = F)
+options(scientific=T, digits = 3) 
+```
+
+```{r init, include=FALSE}
+# If you are missing any of the required packages, please install them first:
+# install.packages(c("rmdformats","kableExtra","corrplot","GGally","caTools",
+#                    "Metrics","glmnet","rpart.plot","tidymodels","caret",
+#                    "randomForest","MASS","car","dplyr","ggplot2"))
+
+knitr::opts_chunk$set(warning = FALSE, results = "hide", message = FALSE, echo = FALSE)
+options(scientific = TRUE, digits = 3)
+
+
+```
+
+## 1. Loading Libraries and Reading the Dataset
+```{r}
+library(dplyr)
+library(MASS)
+library(car)
+library(caTools)
+library(Metrics)
+library(glmnet)
+library(ggplot2)
+library(rpart)  # for decision trees
+library(rpart.plot)
+library(tidymodels)
+library(tidyr)
+library(caret)
+library(knitr)
+library(kableExtra)
+library(corrplot)
+library(GGally)
+library(randomForest)
+
+# Set the working directory (adjust as needed)
+setwd("/Users/zhengdong/Documents/GitHub/Movie-Revenue-Prediction")
+
+# Read in the CSV file. Make sure 'movies.csv' is in the working directory.
+movies <- read.csv("movies.csv")
+
+movie  <- movies 
+
+```
+
+## 2. Preview of the Original Dataset
+
+```{r}
+# Display the first 5 rows to get a quick preview
+
+head(movie, 5) %>%
+  kable(caption = "The first 5 rows of the dataset") %>%
+  kable_styling(full_width = FALSE)
+
+```
+
+
+##3. Removing Unnecessary Columns and Renaming
+```{r}
+# Specify columns to remove by their indices
+remove_col <- c(1,5,7,13,16,17,18,19,20)
+movie <- movie[, -remove_col]
+
+# Assign new column names
+new_column_names <- c("Title", "Genre", "Language", "Popularity", "Release_Date",
+                      "Budget", "Revenue", "Runtime", "Status", "Avg_Vote",
+                      "Vote_Count", "Trailer_Views", "Trailer_Likes")
+colnames(movie) <- new_column_names
+
+# Summarize the current dataset after column removal
+data_summary <- data.frame(
+  Column         = names(movie),
+  Type           = sapply(movie, class),
+  Missing_Values = colSums(is.na(movie))
+)
+
+data_summary %>%
+  kable(caption = "Dataset Summary (After Removing Some Columns)") %>%
+  kable_styling(full_width = FALSE)
+
+```
+
+
+## 4. Handling Missing Values and Cleaning Invalid Rows
+
+```{r}
+# Check the percentage of missing values for each column
+column_na_percentages <- colSums(is.na(movie)) / nrow(movie) * 100
+
+print("Rows in the dataset before dropping rows with NA values:")
+print(nrow(movie))
+
+# Keep only rows with complete data
+movie <- movie[complete.cases(movie), ]
+
+print("Rows in the dataset after dropping rows with NA values:")
+print(nrow(movie))
+
+# Remove rows where Budget, Revenue, or Runtime are <= 0
+print("Rows in the dataset before cleaning:")
+print(nrow(movie))
+
+movie <- movie[movie$Budget > 0, ]
+movie <- movie[movie$Revenue > 0, ]
+movie <- movie[movie$Runtime > 0, ]
+
+print("Rows in the dataset after cleaning:")
+print(nrow(movie))
+
+
+```
+
+## 5 Exploratory Data Analysis
+## 5.1 Box Plots for Numeric Columns
+```{r}
+selected_columns <- c("Popularity", "Budget", "Revenue", "Runtime", 
+                      "Avg_Vote", "Vote_Count", "Trailer_Views","Trailer_Likes")
+
+box_plots_list <- list()
+for (col in selected_columns) {
+  box_plot <- ggplot(movie, aes(y = get(col))) +
+    geom_boxplot(fill = "lightblue", color = "black", alpha = 0.7) +
+    labs(title = paste("Box Plot for", col), y = col) +
+    theme_minimal()
+  box_plots_list[[col]] <- box_plot
+}
+
+# Print each box plot
+for (col in selected_columns) {
+  print(box_plots_list[[col]])
+}
+
+```
+
+##5.2 Scatter Plots for Selected Predictors
+```{r}
+predictors <- c("Trailer_Likes", "Trailer_Views")
+scatter_plots <- lapply(predictors, function(var) {
+  ggplot(movie, aes_string(x = var, y = "Revenue", color = "Revenue")) +
+    geom_point() +
+    labs(title = paste("Scatter plot of", var, "vs. Revenue"),
+         x = var,
+         y = "Revenue",
+         color = "Revenue")
+})
+scatter_plots
+
+```
+
+##5.3 Correlation Matrix and Pairwise Plots
+```{r}
+numeric_cols <- sapply(movie, is.numeric)
+cor_matrix <- cor(movie[, numeric_cols])
+corrplot(cor_matrix, method = "color")
+numeric_vars_subset <- c("Revenue", "Budget", "Popularity", "Runtime")
+ggpairs(movie[, numeric_vars_subset])
+
+```
+
+##6. Building the Initial Linear Models
+##6.1 Stepwise Forward Selection
+```{r}
+# Start with a minimal model (intercept only)
+initial_model <- lm(Revenue ~ 1, data = movie)
+
+# Use stepwise forward selection
+final_model <- stepAIC(initial_model, 
+                       direction = "forward",
+                       scope = list(lower = ~1, 
+                                    upper = ~Popularity + Budget + Runtime + Avg_Vote +
+                                            Vote_Count + Trailer_Views + Trailer_Likes),
+                       data = movie)
+
+summary(final_model)
+
+```
+##6.2 Fitting the Model Based on Stepwise Results
+```{r}
+lm_model_usingFFS <- lm(Revenue ~ Trailer_Views + Trailer_Likes + Vote_Count + Budget + Popularity, 
+                        data = movie)
+summary(lm_model_usingFFS)
+
+library(car)
+influencePlot(lm_model_usingFFS)
+
+```
+
+##6.3 Removing Influential Points and Final Model
+```{r}
+# Remove specific rows identified as influential
+rows_to_remove <- c(15996, 443, 96, 64, 1)
+movie <- movie[!(rownames(movie) %in% rows_to_remove), ]
+# Build the final linear model
+lm_model <- lm(Revenue ~ Trailer_Views + Trailer_Likes + Vote_Count + Budget, data = movie)
+summary(lm_model)
+influencePlot(lm_model)
+
+```
+
+##7. Checking Assumptions of Linear Regression
+```{r}
+# Check Variance Inflation Factors
+vif_values <- vif(lm_model)
+vif_values  # Should be below 10
+
+# Added-variable plots to check linear relationship
+avPlots(lm_model)
+
+# Diagnostic plots: residuals, Q-Q plot, etc.
+plot(lm_model)
+
+```
+
+##8. Train-Test Split and Model Evaluation
+
+```{r}
+set.seed(123)
+split <- sample.split(movie$Revenue, SplitRatio = 0.8)
+train_data <- subset(movie, split == TRUE)
+test_data  <- subset(movie, split == FALSE)
+
+lm_model <- lm(Revenue ~ Trailer_Views + Trailer_Likes + Vote_Count + Budget, data = train_data)
+
+train_predictions <- predict(lm_model, newdata = train_data)
+test_predictions  <- predict(lm_model, newdata = test_data)
+
+test_rmse  <- sqrt(mean((test_data$Revenue  - test_predictions)^2))
+train_rmse <- sqrt(mean((train_data$Revenue - train_predictions)^2))
+
+cat("Test RMSE :", test_rmse, "\n")
+cat("Train RMSE:", train_rmse, "\n")
+
+cat("Mean Revenue in entire dataset:", mean(movie$Revenue, na.rm=TRUE), "\n")
+
+```
+
+```{r}
+set.seed(123)
+split <- sample.split(movie$Revenue, SplitRatio = 0.8)
+train_data <- subset(movie, split == TRUE)
+test_data  <- subset(movie, split == FALSE)
+
+lm_model <- lm(Revenue ~ Trailer_Views + Trailer_Likes + Vote_Count + Budget, data = train_data)
+
+train_predictions <- predict(lm_model, newdata = train_data)
+test_predictions  <- predict(lm_model, newdata = test_data)
+
+test_rmse  <- sqrt(mean((test_data$Revenue  - test_predictions)^2))
+train_rmse <- sqrt(mean((train_data$Revenue - train_predictions)^2))
+
+cat("Test RMSE :", test_rmse, "\n")
+cat("Train RMSE:", train_rmse, "\n")
+
+cat("Mean Revenue in entire dataset:", mean(movie$Revenue, na.rm=TRUE), "\n")
+
+```
+
+##9. Ridge and Lasso Regression
+##9.1 Simple Ridge and Lasso with Lambda = 1
+```{r}
+predictors <- c("Popularity", "Budget", "Runtime", "Avg_Vote", 
+                "Vote_Count", "Trailer_Views", "Trailer_Likes")
+
+# Fit ridge (alpha=0) and lasso (alpha=1) with lambda=1 for demonstration
+ridge_model <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha = 0, lambda = 1)
+lasso_model <- glmnet(as.matrix(train_data[predictors]), train_data$Revenue, alpha = 1, lambda = 1)
+
+ridge_train_predictions <- predict(ridge_model, newx = as.matrix(train_data[predictors]))
+ridge_test_predictions  <- predict(ridge_model, newx = as.matrix(test_data[predictors]))
+lasso_train_predictions <- predict(lasso_model, newx = as.matrix(train_data[predictors]))
+lasso_test_predictions  <- predict(lasso_model, newx = as.matrix(test_data[predictors]))
+
+ridge_train_rmse <- RMSE(train_data$Revenue, ridge_train_predictions)
+ridge_test_rmse  <- RMSE(test_data$Revenue,  ridge_test_predictions)
+lasso_train_rmse <- RMSE(train_data$Revenue, lasso_train_predictions)
+lasso_test_rmse  <- RMSE(test_data$Revenue,  lasso_test_predictions)
+
+cat("Ridge Train RMSE:", ridge_train_rmse, "\n")
+cat("Ridge Test  RMSE:", ridge_test_rmse,   "\n")
+cat("Lasso Train RMSE:", lasso_train_rmse,  "\n")
+cat("Lasso Test  RMSE:", lasso_test_rmse,   "\n")
+```
+
+##9.2 Cross-Validated Ridge and Lasso
+
+```{r}
+set.seed(42)
+X <- as.matrix(train_data[predictors])
+y <- train_data$Revenue
+
+# Generate a grid of lambdas
+lambdas <- 10^seq(10, -1, length = 1000)
+ridge_cv_model <- cv.glmnet(X, y, alpha = 0, lambda = lambdas)
+lasso_cv_model <- cv.glmnet(X, y, alpha = 1, lambda = lambdas)
+
+best_lambda_ridge <- ridge_cv_model$lambda.min
+best_lambda_lasso <- lasso_cv_model$lambda.min
+
+cat("Best lambda (ridge):", best_lambda_ridge, "\n")
+cat("Best lambda (lasso):", best_lambda_lasso, "\n")
+
+# Predictions using the best lambda
+ridgetuned_train_predictions <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(train_data[predictors]))
+ridgetuned_test_predictions  <- predict(ridge_cv_model, s = best_lambda_ridge, newx = as.matrix(test_data[predictors]))
+lassotuned_train_predictions <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(train_data[predictors]))
+lassotuned_test_predictions  <- predict(lasso_cv_model, s = best_lambda_lasso, newx = as.matrix(test_data[predictors]))
+
+ridgetuned_train_rmse <- RMSE(train_data$Revenue, ridgetuned_train_predictions)
+ridgetuned_test_rmse  <- RMSE(test_data$Revenue,  ridgetuned_test_predictions)
+lassotuned_train_rmse <- RMSE(train_data$Revenue, lassotuned_train_predictions)
+lassotuned_test_rmse  <- RMSE(test_data$Revenue,  lassotuned_test_predictions)
+
+cat("Ridge (tuned) Train RMSE:", ridgetuned_train_rmse, "\n")
+cat("Ridge (tuned) Test  RMSE:", ridgetuned_test_rmse,  "\n")
+cat("Lasso (tuned) Train RMSE:", lassotuned_train_rmse, "\n")
+cat("Lasso (tuned) Test  RMSE:", lassotuned_test_rmse,  "\n")
+
+```
+
+##10. Decision Trees and Random Forest
+##10.1 Decision Tree (Model 0: All Features)
+```{r}
+set.seed(1)
+split <- sample.split(movie$Revenue, SplitRatio = 0.8)
+train_data <- subset(movie, split == TRUE)
+test_data  <- subset(movie, split == FALSE)
+
+dt_model0 <- rpart(Revenue ~ Popularity + Budget + Runtime + Avg_Vote + 
+                   Vote_Count + Trailer_Views + Trailer_Likes,
+                   data = train_data, method = "anova")
+y_pred <- predict(dt_model0, test_data)
+
+cat("DT Model0 RMSE:", RMSE(test_data$Revenue, y_pred), "\n")
+printcp(dt_model0)
+rpart.plot(dt_model0)
+plotcp(dt_model0)
+
+```
+
+
+##10.2 Decision Tree (Model 1: Significant Features Only)
+```{r}
+dt_model1 <- rpart(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes,
+                   data = train_data, method = "anova")
+y_pred <- predict(dt_model1, test_data)
+
+cat("DT Model1 RMSE:", RMSE(test_data$Revenue, y_pred), "\n")
+plotcp(dt_model1)
+printcp(dt_model1)
+rpart.plot(dt_model1, box.palette="Reds", shadow.col='gray', roundint=TRUE, digits=1)
+
+```
+
+##10.3 Decision Tree (Model 2: Max Depth = 1)
+```{r}
+dt_model2 <- rpart(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes,
+                   data = train_data, method = "anova", control = list(maxdepth=1))
+y_pred <- predict(dt_model2, test_data)
+
+cat("DT Model2 (depth=1) RMSE:", RMSE(test_data$Revenue, y_pred), "\n")
+printcp(dt_model2)
+rpart.plot(dt_model2, box.palette="Greens", shadow.col='gray', roundint=TRUE, digits=1)
+
+```
+
+##10.4 Random Forest
+```{r}
+set.seed(1)
+rf_model <- randomForest(Revenue ~ Budget + Vote_Count + Trailer_Views + Trailer_Likes,
+                         data = train_data, type = 'regression', ntree = 500)
+
+y_pred <- predict(rf_model, test_data)
+cat("Random Forest RMSE:", RMSE(test_data$Revenue, y_pred), "\n")
+
+importance(rf_model)
+plot(rf_model, main = "Random Forest Model")
+varImpPlot(rf_model, bg = "purple", cex = 1, pch = 22, main = "RF Feature Importance")
+
+```
+
